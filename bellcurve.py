@@ -1,6 +1,24 @@
 import json
+import os
+from datetime import datetime
 import ccxt
 import numpy as np
+
+def log_message(symbol, message):
+    # Ensure the logs directory exists
+    log_dir = "logs"
+    os.makedirs(log_dir, exist_ok=True)
+    
+    # Format the filename: 'Symbol-YYYY-MM-DD.log'
+    date_str = datetime.now().strftime("%Y-%m-%d")
+    filename = f"{log_dir}/{symbol}-{date_str}.log"
+    
+    # Timestamp for the log entry
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    # Append the message to the log file
+    with open(filename, "a") as log_file:
+        log_file.write(f"[{timestamp}] {message}\n")
 
 def load_config(config_path='config.json'):
     """
@@ -122,10 +140,23 @@ def create_bell_curve_orders(current_price, low_price, high_price, peak_position
 def print_orders_plan(orders, symbol):
     # Fetch the market details for the symbol
     base, quote = symbol.split('/')
+    # Temporary storage for order plan messages
+    order_plan_messages = []
     # Print orders plan
     print("\nOrders Plan:")
     for i, (price, quantity, stake_amount, order_type) in enumerate(orders, start=1):
-        print(f"{i}. {order_type} Order - Price: {price} - Quantity: {quantity} {base} - Cost: {stake_amount} {quote}")
+        message = f"{i}. {order_type} Order - Price: {price} - Quantity: {quantity} {base} - Cost: {stake_amount} {quote}"
+        print(message)
+        order_plan_messages.append(message)
+    
+    # Ask if the user is satisfied with the orders plan
+    user_confirmation = input("Are you satisfied with the orders plan? (yes/no): ").lower()
+    if user_confirmation == 'yes':
+        # If approved, log all order plan messages
+        for message in order_plan_messages:
+            log_message(symbol, message)
+
+    return user_confirmation
 
 def place_orders(exchange, symbol, orders, market_details):
     """
@@ -139,7 +170,7 @@ def place_orders(exchange, symbol, orders, market_details):
     # Fetch the market details for the symbol
     base, quote = symbol.split('/')
     
-    for i, price, quantity, stake_amount, order_type in enumerate(orders, start=1):
+    for i, (price, quantity, stake_amount, order_type) in enumerate(orders, start=1):
         # Apply precision
         formatted_price = exchange.price_to_precision(symbol, price)
         formatted_quantity = exchange.amount_to_precision(symbol, quantity)
@@ -165,20 +196,28 @@ def place_orders(exchange, symbol, orders, market_details):
         try:
             if order_type == 'Buy':
                 # Print buy order details
-                print(f"{i}. Placing {order_type} Order - {symbol} - Price: {price}, Quantity: {quantity} {base}, Cost: {cost} {quote}")
+                print(f"{i}. Placing {order_type} Order - {symbol} - Price: {price} - Quantity: {quantity} {base} - Cost: {cost} {quote}")
                 # Place buy order
                 order = exchange.create_limit_buy_order(symbol, formatted_quantity, formatted_price)
             else:
                 # Print sell order details
-                print(f"{i}. Placing {order_type} Order - {symbol} - Price: {price}, Quantity: {quantity} {base}, Cost: {cost} {quote}")
+                print(f"{i}. Placing {order_type} Order - {symbol} - Price: {price} - Quantity: {quantity} {base} - Cost: {cost} {quote}")
                 # Place sell order
                 order = exchange.create_limit_sell_order(symbol, formatted_quantity, formatted_price)
 
-            print(f"{i}. Order Placed: {order_type.capitalize()} {formatted_quantity} of {symbol} @ {formatted_price} for a total cost of {cost}.\n")
-            print("Order details: ", order)
+            success_message = f"{i}. Order Placed: {order_type.capitalize()} {formatted_quantity} of {symbol} @ {formatted_price} for a total cost of {cost}."
+            print(success_message)
+            print(f"{i}. Order Details: ", order)
+            log_message(symbol, success_message)
+            log_message(symbol, f'{i}. Order Details: ')
+            log_message(symbol, order)
         except Exception as e:
-            print(f" {i}. Failed to place {order_type.capitalize()} order for {symbol} at price {formatted_price} and quantity {formatted_quantity}.\n")
-            print("Error:", e)
+            failure_message = f"{i}. Failed to place {order_type.capitalize()} order for {symbol} at price {formatted_price} and quantity {formatted_quantity}.\n"
+            print(failure_message)
+            print(f"{i}. Error:", e)
+            log_message(symbol, failure_message)
+            log_message(symbol, f'{i}. Error: ')
+            log_message(symbol, e)
 
 # Load API configuration
 config = load_config()
@@ -240,10 +279,8 @@ while not satisfied:
     orders = create_bell_curve_orders(current_price, low_price, high_price, peak_position, total_orders, base_quantity, quote_quantity, market_details, exchange, symbol)
 
     # Print orders plan
-    print_orders_plan(orders, symbol)
+    user_confirmation = print_orders_plan(orders, symbol)
 
-    # Ask if the user is satisfied with the orders plan
-    user_confirmation = input("Are you satisfied with the orders plan? (yes/no): ").lower()
     satisfied = user_confirmation == 'yes'
 
 # Place orders after confirmation
