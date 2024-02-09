@@ -62,7 +62,7 @@ def fetch_and_display_balances(exchange, symbol):
     base_balance = balance.get(base, {}).get('free', 0)
     quote_balance = balance.get(quote, {}).get('free', 0)
     print(f"{base} Quantity available to allocate for this bell curve grid: {base_balance} {base}")
-    print(f"{quote} Quantity available to allocate for this bell curve grid: {quote_balance} {quote}")
+    print(f"{quote} Quantity available to allocate for this bell curve grid: {quote_balance} {quote}\n")
     return base, quote, base_balance, quote_balance
 
 def fetch_current_price(exchange, symbol):
@@ -151,7 +151,7 @@ def print_orders_plan(orders, symbol):
         order_plan_messages.append(message)
     
     # Ask if the user is satisfied with the orders plan
-    user_confirmation = input("Are you satisfied with the orders plan? (yes/no): ").lower()
+    user_confirmation = input("\nAre you satisfied with the orders plan? (yes/no): ").lower()
     if user_confirmation == 'yes':
         log_message(symbol, 'Orders Plan:')
         # If approved, log all order plan messages
@@ -164,7 +164,7 @@ def place_orders(exchange, symbol, orders, market_details):
     """
     Place buy and sell limit orders after user confirmation.
     """
-    confirmation = input("Do you want to place these orders? (yes/no): ")
+    confirmation = input("Do you want to place these orders? (yes/no): \n").lower()
     if confirmation.lower() != 'yes':
         print("Orders not placed.")
         return
@@ -283,5 +283,20 @@ while not satisfied:
 
     satisfied = user_confirmation == 'yes'
 
+# Log inputs
+log_message(symbol, '-----------------------------------')
+log_message(symbol, f'Total Orders in Bell Curve Grid: {total_orders}')
+log_message(symbol, f'Peak Position: {peak_position}')
+log_message(symbol, f'High Price: {high_price}')
+log_message(symbol, f'Current Price: {current_price}')
+log_message(symbol, f'Low Price: {low_price}')
+log_message(symbol, f'Base Quantity: {base_quantity} {base}')
+log_message(symbol, f'Quote Quantity: {quote_quantity} {quote}')
+log_message(symbol, '-----------------------------------')
+
 # Place orders after confirmation
 place_orders(exchange, symbol, orders, market_details)
+
+# Exit the script
+log_message(symbol, 'Done!')
+print("Done!")
