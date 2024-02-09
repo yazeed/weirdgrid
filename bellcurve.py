@@ -11,7 +11,8 @@ def log_message(symbol, message):
     
     # Format the filename: 'Symbol-YYYY-MM-DD.log'
     date_str = datetime.now().strftime("%Y-%m-%d")
-    filename = f"{log_dir}/{symbol}-{date_str}.log"
+    stripped_symbol = symbol.replace("/", "-")
+    filename = f"{log_dir}/{stripped_symbol}-{date_str}.log"
     
     # Timestamp for the log entry
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -154,6 +155,7 @@ def print_orders_plan(orders, symbol):
     if user_confirmation == 'yes':
         # If approved, log all order plan messages
         for message in order_plan_messages:
+            log_message(symbol, 'Orders Plan:')
             log_message(symbol, message)
 
     return user_confirmation
@@ -209,15 +211,13 @@ def place_orders(exchange, symbol, orders, market_details):
             print(success_message)
             print(f"{i}. Order Details: ", order)
             log_message(symbol, success_message)
-            log_message(symbol, f'{i}. Order Details: ')
-            log_message(symbol, order)
+            log_message(symbol, f'{i}. Order Details: {order}')
         except Exception as e:
             failure_message = f"{i}. Failed to place {order_type.capitalize()} order for {symbol} at price {formatted_price} and quantity {formatted_quantity}.\n"
             print(failure_message)
             print(f"{i}. Error:", e)
             log_message(symbol, failure_message)
-            log_message(symbol, f'{i}. Error: ')
-            log_message(symbol, e)
+            log_message(symbol, f'{i}. Error: {e}')
 
 # Load API configuration
 config = load_config()
