@@ -153,9 +153,9 @@ def print_orders_plan(orders, symbol):
     # Ask if the user is satisfied with the orders plan
     user_confirmation = input("Are you satisfied with the orders plan? (yes/no): ").lower()
     if user_confirmation == 'yes':
+        log_message(symbol, 'Orders Plan:')
         # If approved, log all order plan messages
         for message in order_plan_messages:
-            log_message(symbol, 'Orders Plan:')
             log_message(symbol, message)
 
     return user_confirmation
