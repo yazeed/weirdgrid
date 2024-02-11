@@ -144,12 +144,28 @@ def print_orders_plan(orders, symbol):
     # Temporary storage for order plan messages
     order_plan_messages = []
     # Print orders plan
-    print("\nOrders Plan:")
+    print("\nBell Curve Grid - Orders Plan:")
+    print('-----------------------------------')
     for i, (price, quantity, stake_amount, order_type) in enumerate(orders, start=1):
         message = f"{i}. {order_type} Order - Price: {price} - Quantity: {quantity} {base} - Cost: {stake_amount} {quote}"
         print(message)
         order_plan_messages.append(message)
     
+    # Log inputs
+    log_inputs = '\n'.join([
+        f'-----------------------------------',
+        f'Number of Orders in Bell Curve Grid: {total_orders}',
+        f'Peak Position: {peak_position}',
+        f'Base Quantity: {base_quantity} {base}',
+        f'Quote Quantity: {quote_quantity} {quote}',
+        f'-----------------------------------',
+        f'High Price: {high_price}',
+        f'Current Price: {current_price}',
+        f'Low Price: {low_price}',
+        f'-----------------------------------'
+    ])
+    print(log_inputs)
+
     # Ask if the user is satisfied with the orders plan
     user_confirmation = input("\nAre you satisfied with the orders plan? (yes/no): ").lower()
     if user_confirmation == 'yes':
@@ -158,13 +174,15 @@ def print_orders_plan(orders, symbol):
         for message in order_plan_messages:
             log_message(symbol, message)
 
+        log_message(symbol, log_inputs)
+
     return user_confirmation
 
 def place_orders(exchange, symbol, orders, market_details):
     """
     Place buy and sell limit orders after user confirmation.
     """
-    confirmation = input("Do you want to place these orders? (yes/no): \n").lower()
+    confirmation = input("Do you want to place these orders? (yes/no): ").lower()
     if confirmation.lower() != 'yes':
         print("Orders not placed.")
         return
@@ -282,17 +300,6 @@ while not satisfied:
     user_confirmation = print_orders_plan(orders, symbol)
 
     satisfied = user_confirmation == 'yes'
-
-# Log inputs
-log_message(symbol, '-----------------------------------')
-log_message(symbol, f'Total Orders in Bell Curve Grid: {total_orders}')
-log_message(symbol, f'Peak Position: {peak_position}')
-log_message(symbol, f'High Price: {high_price}')
-log_message(symbol, f'Current Price: {current_price}')
-log_message(symbol, f'Low Price: {low_price}')
-log_message(symbol, f'Base Quantity: {base_quantity} {base}')
-log_message(symbol, f'Quote Quantity: {quote_quantity} {quote}')
-log_message(symbol, '-----------------------------------')
 
 # Place orders after confirmation
 place_orders(exchange, symbol, orders, market_details)
