@@ -1,4 +1,3 @@
 ccxt>=1.42.0
 numpy>=1.19.5
 matplotlib>=3.3.4
-tkinter>=8.6
