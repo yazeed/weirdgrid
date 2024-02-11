@@ -9,10 +9,14 @@ def log_message(symbol, message):
     log_dir = "logs"
     os.makedirs(log_dir, exist_ok=True)
     
-    # Format the filename: 'Symbol-YYYY-MM-DD.log'
+    # Format the folder name: 'YYYY-MM-DD'
     date_str = datetime.now().strftime("%Y-%m-%d")
+    folder_path = f"{log_dir}/{date_str}"
+    os.makedirs(folder_path, exist_ok=True)
+    
+    # Format the filename: 'Symbol.log'
     stripped_symbol = symbol.replace("/", "-")
-    filename = f"{log_dir}/{stripped_symbol}-{date_str}.log"
+    filename = f"{folder_path}/{stripped_symbol}.log"
     
     # Timestamp for the log entry
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -70,6 +74,7 @@ def fetch_current_price(exchange, symbol):
     Fetch the current price of the symbol.
     """
     ticker = exchange.fetch_ticker(symbol)
+    print(f"\nCurrent price of {symbol}: {ticker['last']}\n")
     return ticker['last']  # Using the last price as the current price
 
 def decide_quantities(base, quote, base_balance, quote_balance, base_quantity, quote_quantity, current_price):
@@ -265,7 +270,6 @@ satisfied = False
 while not satisfied:
     # Fetch current price and generate orders
     current_price = fetch_current_price(exchange, symbol)
-    print(f"Current price of {symbol}: {current_price}")
 
     # Assume base_balance and quote_balance fetched from the exchange
     base, quote, base_balance, quote_balance = fetch_and_display_balances(exchange, symbol)
