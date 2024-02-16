@@ -5,6 +5,9 @@ import ccxt
 import numpy as np
 
 def log_message(symbol, message):
+    """
+    Log a message to a file.
+    """
     # Ensure the logs directory exists
     log_dir = "logs"
     os.makedirs(log_dir, exist_ok=True)
@@ -100,7 +103,47 @@ def decide_quantities(base, quote, base_balance, quote_balance, base_quantity, q
 
     return base_quantity, quote_quantity
 
+def decide_peak_position(peak_position, total_orders):
+    """
+    Decide on the peak position.
+    """
+    try:
+        peak_position_input = input(f"Enter peak position (index or 'middle') [{peak_position}]: ")
+        if peak_position_input.isdigit():
+            peak_position = int(peak_position_input)
+
+            # Validate peak_position
+            if not (0 <= peak_position <= total_orders):
+                print(f"Peak position {peak_position} out of range for {total_orders} orders.")
+                decide_peak_position(peak_position, total_orders)
+        else:
+            peak_position = 'middle'  # Default to middle if input is not a digit
+    except ValueError:
+        peak_position = 'middle'  # Default to middle on any conversion error
+
+    return peak_position
+
+def decide_prices_and_orders(low_price, high_price, total_orders):
+    """
+    Decide on the prices and orders.
+    """
+    # Adjusted user input for symbol, price range, total orders, and peak position
+    low_price = float(input(f"Enter the low price [{low_price if low_price is not None else 'None'}]: ") or low_price)
+    high_price = float(input(f"Enter the high price [{high_price if high_price is not None else 'None'}]: ") or high_price)
+    total_orders = int(input(f"Enter the total number of orders [{total_orders if total_orders else 'None'}]: ") or total_orders)
+
+    # Convert input values to appropriate types
+    low_price = float(low_price)
+    high_price = float(high_price)
+    total_orders = int(total_orders)
+
+    return low_price, high_price, total_orders
+
 def create_bell_curve_orders(current_price, low_price, high_price, peak_position, total_orders, base_quantity, quote_quantity, market_details, exchange, symbol):
+    """
+    Create the bell curve orders.
+    """
+    # Calculate the price points
     price_points = np.linspace(low_price, high_price, total_orders)
     avg_price = np.mean([low_price, high_price])
 
@@ -144,6 +187,9 @@ def create_bell_curve_orders(current_price, low_price, high_price, peak_position
     return orders
 
 def print_orders_plan(orders, symbol):
+    """
+    Print the orders plan.
+    """
     # Fetch the market details for the symbol
     base, quote = symbol.split('/')
     # Temporary storage for order plan messages
@@ -271,34 +317,30 @@ while not satisfied:
     # Fetch current price and generate orders
     current_price = fetch_current_price(exchange, symbol)
 
+    # If low_price and high_price are None, set low_price to 15% below current_price and high_price to 2.5% below current_price, rounded to same number of decimals on current_price
+    if low_price is None and high_price is None:
+        low_price = round(current_price * 0.85, len(str(current_price).split('.')[1]))
+        high_price = round(current_price * 0.975, len(str(current_price).split('.')[1]))
+
     # Assume base_balance and quote_balance fetched from the exchange
     base, quote, base_balance, quote_balance = fetch_and_display_balances(exchange, symbol)
 
     # Adjusted user input for symbol, price range, total orders, and peak position
-    low_price = float(input(f"Enter the low price [{low_price if low_price is not None else 'None'}]: ") or low_price)
-    high_price = float(input(f"Enter the high price [{high_price if high_price is not None else 'None'}]: ") or high_price)
-    total_orders = int(input(f"Enter the total number of orders [{total_orders if total_orders else 'None'}]: ") or total_orders)
-
-    # Convert input values to appropriate types
-    low_price = float(low_price)
-    high_price = float(high_price)
-    total_orders = int(total_orders)
+    low_price, high_price, total_orders = decide_prices_and_orders(low_price, high_price, total_orders)
 
     # Decide quantities to allocate to buy and sell orders
     base_quantity, quote_quantity = decide_quantities(base, quote, base_balance, quote_balance, base_quantity, quote_quantity, current_price)
 
-    # Adjusted user input handling for peak_position
-    try:
-        peak_position_input = input(f"Enter peak position (index or 'middle') [{peak_position}]: ")
-        if peak_position_input.isdigit():
-            peak_position = int(peak_position_input)
-        else:
-            peak_position = 'middle'  # Default to middle if input is not a digit
-    except ValueError:
-        peak_position = 'middle'  # Default to middle on any conversion error
+    # Decide peak position on bell curve
+    peak_position = decide_peak_position(peak_position, total_orders)
 
     # Assuming market_details is obtained and validated earlier in the script
     orders = create_bell_curve_orders(current_price, low_price, high_price, peak_position, total_orders, base_quantity, quote_quantity, market_details, exchange, symbol)
+
+    # Validate bell orders more than 1 order
+    if len(orders) < 2 or len(orders) > 100:
+        print("The bell curve grid requires at least 2 orders, and a maximum of 100 orders.")
+        continue
 
     # Print orders plan
     user_confirmation = print_orders_plan(orders, symbol)
