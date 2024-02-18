@@ -120,7 +120,7 @@ def decide_quantities(base, quote, base_balance, quote_balance, base_quantity, q
 
     return base_quantity, quote_quantity
 
-def decide_peak_position(peak_position, total_orders):
+def decide_peak_position(peak_position, total_orders, std_dev_dividor):
     """
     Decide on the peak position.
     """
@@ -132,13 +132,16 @@ def decide_peak_position(peak_position, total_orders):
             # Validate peak_position
             if not (0 <= peak_position <= total_orders):
                 print(f"Peak position {peak_position} out of range for {total_orders} orders.")
-                decide_peak_position(peak_position, total_orders)
+                decide_peak_position(peak_position, total_orders, std_dev_dividor)
         else:
             peak_position = 'middle'  # Default to middle if input is not a digit
     except ValueError:
         peak_position = 'middle'  # Default to middle on any conversion error
 
-    return peak_position
+    std_dev_dividor_input = input(f"Enter the standard deviation of the distribution of orders [{std_dev_dividor}]: ")
+    std_dev_dividor = float(std_dev_dividor_input) if std_dev_dividor_input else 1.5
+
+    return peak_position, std_dev_dividor
 
 def decide_prices_and_orders(low_price, high_price, total_orders):
     """
@@ -156,7 +159,7 @@ def decide_prices_and_orders(low_price, high_price, total_orders):
 
     return low_price, high_price, total_orders
 
-def create_bell_curve_orders(current_price, low_price, high_price, peak_position, total_orders, base_quantity, quote_quantity, market_details, exchange, symbol):
+def create_bell_curve_orders(current_price, low_price, high_price, peak_position, total_orders, base_quantity, quote_quantity, std_dev_dividor, market_details, exchange, symbol):
     """
     Create the bell curve orders.
     """
@@ -169,9 +172,7 @@ def create_bell_curve_orders(current_price, low_price, high_price, peak_position
 
     # Calculate distribution
     x_values = np.arange(total_orders)
-    std_dev_dividor = input("Enter the standard deviation of the distribution of orders [2]: ")
-    std_dev_dividor_float = float(std_dev_dividor) if std_dev_dividor else 2
-    std_dev = total_orders / std_dev_dividor_float  # Adjusted for broader distribution
+    std_dev = total_orders / std_dev_dividor  # Adjusted for broader distribution
     distribution = np.exp(-(x_values - mean_index) ** 2 / (2 * std_dev ** 2))
     distribution /= distribution.sum()  # Normalize distribution
 
@@ -324,6 +325,7 @@ total_orders = 20
 peak_position = 'middle'
 base_quantity = 0
 quote_quantity = 0
+std_dev_dividor = 1.5
 
 # User input for symbol
 exchange_input = input(f"Enter the exchange name [{default_exchange}]: ").lower()
@@ -362,10 +364,10 @@ while not satisfied:
     base_quantity, quote_quantity = decide_quantities(base, quote, base_balance, quote_balance, base_quantity, quote_quantity, current_price)
 
     # Decide peak position on bell curve
-    peak_position = decide_peak_position(peak_position, total_orders)
+    peak_position, std_dev_dividor = decide_peak_position(peak_position, total_orders, std_dev_dividor)
 
     # Assuming market_details is obtained and validated earlier in the script
-    orders = create_bell_curve_orders(current_price, low_price, high_price, peak_position, total_orders, base_quantity, quote_quantity, market_details, exchange, symbol)
+    orders = create_bell_curve_orders(current_price, low_price, high_price, peak_position, total_orders, base_quantity, quote_quantity, std_dev_dividor, market_details, exchange, symbol)
 
     # Validate bell orders more than 1 order
     if len(orders) < 2 or len(orders) > 100:
