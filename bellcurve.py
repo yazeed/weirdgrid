@@ -42,7 +42,7 @@ def initialize_exchange(exchange_name, config):
     """
     # Validate that config contains key with exchange_name
     if exchange_name not in config:
-        print(f"apiKey and secret configuration for {exchange_name} not found.")
+        print(f"Error: apiKey and secret configuration for {exchange_name} not found.")
         exit()
     
     # Initialize the exchange
@@ -59,7 +59,7 @@ def initialize_exchange(exchange_name, config):
 
     # Validate that the exchange is working
     if not exchange.check_required_credentials():
-        print(f"Exchange {exchange_name} is not working.")
+        print(f"Error: Exchange {exchange_name} is not working.")
         exit()
 
     return exchange
@@ -103,18 +103,18 @@ def decide_quantities(base, quote, base_balance, quote_balance, base_quantity, q
     """
     if low_price < current_price < high_price:
         # Range straddles the current price; ask for both allocations
-        base_quantity_input = input(f"Enter how much of your {base_balance} {base} to allocate for sell orders [{base_quantity if base_quantity else '0'}]: ")
+        base_quantity_input = input(f"Enter how much of your {base_balance} {base} to allocate for sell orders [{base_quantity}]: ")
         base_quantity = float(base_quantity_input) if base_quantity_input else base_quantity
-        quote_quantity_input = input(f"Enter how much of your {quote_balance} {quote} to allocate for buy orders [{quote_quantity if quote_quantity else '0'}]: ")
+        quote_quantity_input = input(f"Enter how much of your {quote_balance} {quote} to allocate for buy orders [{quote_quantity}]: ")
         quote_quantity = float(quote_quantity_input) if quote_quantity_input else quote_quantity
     elif high_price <= current_price:
         # All orders are buy orders; only QUOTE allocation needed
-        quote_quantity_input = input(f"Enter how much of your {quote_balance} {quote} to allocate for buy orders [{quote_quantity if quote_quantity else '0'}]: ")
+        quote_quantity_input = input(f"Enter how much of your {quote_balance} {quote} to allocate for buy orders [{quote_quantity}]: ")
         quote_quantity = float(quote_quantity_input) if quote_quantity_input else quote_quantity
         base_quantity = 0
     else:  # low_price >= current_price
         # All orders are sell orders; only BASE allocation needed
-        base_quantity_input = input(f"Enter how much of your {base_balance} {base} to allocate for sell orders [{base_quantity if base_quantity else '0'}]: ")
+        base_quantity_input = input(f"Enter how much of your {base_balance} {base} to allocate for sell orders [{base_quantity}]: ")
         base_quantity = float(base_quantity_input) if base_quantity_input else base_quantity
         quote_quantity = 0
 
@@ -127,19 +127,21 @@ def decide_peak_position(peak_position, total_orders, std_dev_dividor):
     try:
         peak_position_input = input(f"Enter peak position (index or 'middle') [{peak_position}]: ")
         if peak_position_input.isdigit():
-            peak_position = int(peak_position_input)
+            peak_position = int(peak_position_input) if peak_position_input else peak_position
 
             # Validate peak_position
             if not (0 <= peak_position <= total_orders):
                 print(f"Peak position {peak_position} out of range for {total_orders} orders.")
                 decide_peak_position(peak_position, total_orders, std_dev_dividor)
         else:
-            peak_position = 'middle'  # Default to middle if input is not a digit
+            # if peak_position_input empty use peak_position, else peak_position is set to middle
+            if peak_position_input:
+                peak_position = 'middle'
     except ValueError:
         peak_position = 'middle'  # Default to middle on any conversion error
 
     std_dev_dividor_input = input(f"Enter the standard deviation of the distribution of orders [{std_dev_dividor}]: ")
-    std_dev_dividor = float(std_dev_dividor_input) if std_dev_dividor_input else 1.5
+    std_dev_dividor = float(std_dev_dividor_input) if std_dev_dividor_input else std_dev_dividor
 
     return peak_position, std_dev_dividor
 
@@ -150,7 +152,7 @@ def decide_prices_and_orders(low_price, high_price, total_orders):
     # Adjusted user input for symbol, price range, total orders, and peak position
     low_price = float(input(f"Enter the low price [{low_price if low_price is not None else 'None'}]: ") or low_price)
     high_price = float(input(f"Enter the high price [{high_price if high_price is not None else 'None'}]: ") or high_price)
-    total_orders = int(input(f"Enter the total number of orders [{total_orders if total_orders else 'None'}]: ") or total_orders)
+    total_orders = int(input(f"Enter the total number of orders [{total_orders}]: ") or total_orders)
 
     # Convert input values to appropriate types
     low_price = float(low_price)
@@ -320,12 +322,15 @@ config = load_config()
 # Load default variables
 default_exchange = config['defaults']['exchange']
 low_price = None
+low_price_percent = float(config['defaults']['lowPricePct'])
 high_price = None
-total_orders = 20
-peak_position = 'middle'
+high_price_percent = float(config['defaults']['highPricePct'])
+current_price = None
+total_orders = int(config['defaults']['totalOrders'])
+peak_position = config['defaults']['peakPosition']
 base_quantity = 0
 quote_quantity = 0
-std_dev_dividor = 1.5
+std_dev_dividor = float(config['defaults']['stdDevDividor'])
 
 # User input for symbol
 exchange_input = input(f"Enter the exchange name [{default_exchange}]: ").lower()
@@ -349,10 +354,14 @@ while not satisfied:
     # Fetch current price and generate orders
     current_price = fetch_current_price(exchange, symbol)
 
+    if current_price is None:
+        print("Could not fetch current price for symbol. Please try again.")
+        continue
+
     # If low_price and high_price are None, set low_price to 15% below current_price and high_price to 2.5% below current_price, rounded to same number of decimals on current_price
     if low_price is None and high_price is None:
-        low_price = round(current_price * 0.85, len(str(current_price).split('.')[1]))
-        high_price = round(current_price * 0.975, len(str(current_price).split('.')[1]))
+        low_price = round(current_price * low_price_percent, len(str(current_price).split('.')[1]))
+        high_price = round(current_price * high_price_percent, len(str(current_price).split('.')[1]))
 
     # Assume base_balance and quote_balance fetched from the exchange
     base, quote, base_balance, quote_balance = fetch_and_display_balances(exchange, symbol)
