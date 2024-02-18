@@ -1,7 +1,19 @@
 {
-  "binance": {
+  "defaults": {
     "exchange": "binance",
+    "lowPricePct": 0.85,
+    "highPricePct": 0.975,
+    "totalOrders": 20,
+    "stdDevDividor": 2,
+    "peakPosition": "middle"
+  },
+  "binance": {
     "apiKey": "",
     "secretKey": ""
+  },
+  "kucoin": {
+    "apiKey": "<KEY>",
+    "secretKey": "<KEY>",
+    "password": "<PASSWORD>"
   }
 }

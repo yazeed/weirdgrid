@@ -36,15 +36,32 @@ def load_config(config_path='config.json'):
         config = json.load(file)
     return config
 
-def initialize_exchange(config):
+def initialize_exchange(exchange_name, config):
     """
     Initialize the exchange with API keys from the configuration.
     """
-    exchange = ccxt.binance({
-        'apiKey': config['binance']['apiKey'],
-        'secret': config['binance']['secretKey'],
+    # Validate that config contains key with exchange_name
+    if exchange_name not in config:
+        print(f"apiKey and secret configuration for {exchange_name} not found.")
+        exit()
+    
+    # Initialize the exchange
+    exchange_config = {
+        'apiKey': config[exchange_name]['apiKey'],
+        'secret': config[exchange_name]['secretKey'],
         'enableRateLimit': True,
-    })
+    }
+
+    if 'password' in config[exchange_name]:
+        exchange_config['password'] = config[exchange_name]['password']
+
+    exchange = getattr(ccxt, exchange_name)(exchange_config)
+
+    # Validate that the exchange is working
+    if not exchange.check_required_credentials():
+        print(f"Exchange {exchange_name} is not working.")
+        exit()
+
     return exchange
 
 def validate_symbol(exchange, symbol):
@@ -251,12 +268,20 @@ def place_orders(exchange, symbol, orders, market_details):
         price = float(formatted_price)
         quantity = float(formatted_quantity)
         cost = float(formatted_cost)
+
+        # Print market details
+        print(f"\nOrder Details for {symbol}:")
+        print(f"-----------------------------------")
+        print(f"Price: {price}")
+        print(f"Quantity: {quantity} {base}")
+        print(f"Cost: {cost} {quote}")
+        print(f"-----------------------------------\n")
         
         # Validate against limits
         if not (market_details['limits']['amount']['min'] <= quantity <= market_details['limits']['amount']['max']):
             print(f"Quantity {quantity} out of range for {symbol}.")
             continue
-        if not (market_details['limits']['price']['min'] <= price <= market_details['limits']['price']['max']):
+        if (not (market_details['limits']['price']['min'] is None) or not (market_details['limits']['price']['max'] is None)) and (not (market_details['limits']['price']['min'] <= price <= market_details['limits']['price']['max'])):
             print(f"Price {price} out of range for {symbol}.")
             continue
         if not (market_details['limits']['cost']['min'] <= cost <= market_details['limits']['cost']['max']):
@@ -291,8 +316,21 @@ def place_orders(exchange, symbol, orders, market_details):
 # Load API configuration
 config = load_config()
 
-# Initialize CCXT Binance client with your API keys
-exchange = initialize_exchange(config)
+# Load default variables
+default_exchange = config['defaults']['exchange']
+low_price = None
+high_price = None
+total_orders = 20
+peak_position = 'middle'
+base_quantity = 0
+quote_quantity = 0
+
+# User input for symbol
+exchange_input = input(f"Enter the exchange name [{default_exchange}]: ").lower()
+exchange_name = exchange_input if exchange_input else default_exchange
+
+# Initialize CCXT exchange client with your API keys
+exchange = initialize_exchange(exchange_name, config)
 
 # User input for symbol
 symbol = input("Enter the symbol (e.g., 'JUP/USDT'): ").upper()
@@ -302,14 +340,6 @@ market_details = validate_symbol(exchange, symbol)
 if not market_details:
     # Handle invalid symbol case here (e.g., request new input or exit)
     exit("Exiting due to invalid symbol.")
-
-# Initial values for inputs
-low_price = None
-high_price = None
-total_orders = 20
-peak_position = 'middle'
-base_quantity = 0
-quote_quantity = 0
 
 # Iterate until user inputs are valid
 satisfied = False
