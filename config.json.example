@@ -4,7 +4,7 @@
     "lowPricePct": 0.85,
     "highPricePct": 0.975,
     "totalOrders": 20,
-    "stdDevDividor": 2,
+    "stdDevDividor": 1.75,
     "peakPosition": "middle"
   },
   "binance": {
@@ -12,8 +12,8 @@
     "secretKey": ""
   },
   "kucoin": {
-    "apiKey": "<KEY>",
-    "secretKey": "<KEY>",
-    "password": "<PASSWORD>"
+    "apiKey": "",
+    "secretKey": "",
+    "password": ""
   }
 }
