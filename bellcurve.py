@@ -4,27 +4,23 @@ from datetime import datetime
 import ccxt
 import numpy as np
 
-def log_message(symbol, message):
+def log_message(exchange, symbol, message):
     """
     Log a message to a file.
     """
-    # Ensure the logs directory exists
-    log_dir = "logs"
+    # Adjusted to include exchange name in log directory path
+    log_dir = f"logs/{exchange.name}"
     os.makedirs(log_dir, exist_ok=True)
     
-    # Format the folder name: 'YYYY-MM-DD'
     date_str = datetime.now().strftime("%Y-%m-%d")
     folder_path = f"{log_dir}/{date_str}"
     os.makedirs(folder_path, exist_ok=True)
     
-    # Format the filename: 'Symbol.log'
     stripped_symbol = symbol.replace("/", "-")
     filename = f"{folder_path}/{stripped_symbol}.log"
     
-    # Timestamp for the log entry
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
-    # Append the message to the log file
     with open(filename, "a") as log_file:
         log_file.write(f"[{timestamp}] {message}\n")
 
@@ -206,7 +202,7 @@ def create_bell_curve_orders(current_price, low_price, high_price, peak_position
 
     return orders
 
-def print_orders_plan(orders, symbol):
+def print_orders_plan(exchange, symbol, orders):
     """
     Print the orders plan.
     """
@@ -215,7 +211,7 @@ def print_orders_plan(orders, symbol):
     # Temporary storage for order plan messages
     order_plan_messages = []
     # Print orders plan
-    print("\nBell Curve Grid - Orders Plan:")
+    print(f"\nBell Curve Grid - {exchange.name} - {symbol} Orders Plan:")
     print('-----------------------------------')
     for i, (price, quantity, stake_amount, order_type) in enumerate(orders, start=1):
         message = f"{i}. {order_type} Order - Price: {price} - Quantity: {quantity} {base} - Cost: {stake_amount} {quote}"
@@ -240,12 +236,12 @@ def print_orders_plan(orders, symbol):
     # Ask if the user is satisfied with the orders plan
     user_confirmation = input("\nAre you satisfied with the orders plan? (yes/no): ").lower()
     if user_confirmation == 'yes':
-        log_message(symbol, 'Orders Plan:')
+        log_message(exchange, symbol, f"Bell Curve Grid - {exchange.name} - {symbol} Orders Plan:")
         # If approved, log all order plan messages
         for message in order_plan_messages:
-            log_message(symbol, message)
+            log_message(exchange, symbol, message)
 
-        log_message(symbol, log_inputs)
+        log_message(exchange, symbol, log_inputs)
 
     return user_confirmation
 
@@ -307,14 +303,14 @@ def place_orders(exchange, symbol, orders, market_details):
             success_message = f"{i}. Order Placed: {order_type.capitalize()} {formatted_quantity} of {symbol} @ {formatted_price} for a total cost of {cost}."
             print(success_message)
             print(f"{i}. Order Details: ", order)
-            log_message(symbol, success_message)
-            log_message(symbol, f'{i}. Order Details: {order}')
+            log_message(exchange, symbol, success_message)
+            log_message(exchange, symbol, f'{i}. Order Details: {order}')
         except Exception as e:
             failure_message = f"{i}. Failed to place {order_type.capitalize()} order for {symbol} at price {formatted_price} and quantity {formatted_quantity}.\n"
             print(failure_message)
             print(f"{i}. Error:", e)
-            log_message(symbol, failure_message)
-            log_message(symbol, f'{i}. Error: {e}')
+            log_message(exchange, symbol, failure_message)
+            log_message(exchange, symbol, f'{i}. Error: {e}')
 
 # Load API configuration
 config = load_config()
@@ -384,7 +380,7 @@ while not satisfied:
         continue
 
     # Print orders plan
-    user_confirmation = print_orders_plan(orders, symbol)
+    user_confirmation = print_orders_plan(exchange, symbol, orders)
 
     satisfied = user_confirmation == 'yes'
 
@@ -392,5 +388,5 @@ while not satisfied:
 place_orders(exchange, symbol, orders, market_details)
 
 # Exit the script
-log_message(symbol, 'Done!')
+log_message(exchange, symbol, 'Done!')
 print("Done!")
