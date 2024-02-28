@@ -25,5 +25,5 @@ def visualize_orders(orders, current_price):
     plt.show()
     plt.savefig('orders.png')
 
-Visualize orders
+# Visualize orders
 visualize_orders(orders, current_price)
