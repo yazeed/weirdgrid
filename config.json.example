@@ -15,5 +15,18 @@
     "apiKey": "",
     "secretKey": "",
     "password": ""
+  },
+  "bybit": {
+    "apyKey": "",
+    "secretKey": ""
+  },
+  "mexc": {
+    "apiKey": "",
+    "secretKey": ""
+  },
+  "okx": {
+    "apiKey": "",
+    "secretKey": "",
+    "password": ""
   }
 }

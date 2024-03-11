@@ -38,7 +38,7 @@ def initialize_exchange(exchange_name, config):
     """
     # Validate that config contains key with exchange_name
     if exchange_name not in config:
-        print(f"Error: apiKey and secret configuration for {exchange_name} not found.")
+        print(f"Error: apiKey and secretKey configuration for {exchange_name} not found.")
         exit()
     
     # Initialize the exchange
@@ -46,6 +46,9 @@ def initialize_exchange(exchange_name, config):
         'apiKey': config[exchange_name]['apiKey'],
         'secret': config[exchange_name]['secretKey'],
         'enableRateLimit': True,
+        'options': {
+            'defaultType': 'spot',
+        }
     }
 
     if 'password' in config[exchange_name]:
@@ -55,7 +58,7 @@ def initialize_exchange(exchange_name, config):
 
     # Validate that the exchange is working
     if not exchange.check_required_credentials():
-        print(f"Error: Exchange {exchange_name} is not working.")
+        print(f"Error: Unable to authenticate with {exchange_name}.")
         exit()
 
     return exchange
@@ -81,7 +84,7 @@ def fetch_and_display_balances(exchange, symbol):
     balance = exchange.fetch_balance()
     base_balance = balance.get(base, {}).get('free', 0)
     quote_balance = balance.get(quote, {}).get('free', 0)
-    print(f"{base} Quantity available to allocate for this bell curve grid: {base_balance} {base}")
+    print(f"\n{base} Quantity available to allocate for this bell curve grid: {base_balance} {base}")
     print(f"{quote} Quantity available to allocate for this bell curve grid: {quote_balance} {quote}\n")
     return base, quote, base_balance, quote_balance
 
@@ -90,10 +93,10 @@ def fetch_current_price(exchange, symbol):
     Fetch the current price of the symbol.
     """
     ticker = exchange.fetch_ticker(symbol)
-    print(f"\nCurrent price of {symbol}: {ticker['last']}\n")
+    print(f"\nCurrent price of {symbol}: {ticker['last']}")
     return ticker['last']  # Using the last price as the current price
 
-def decide_quantities(base, quote, base_balance, quote_balance, base_quantity, quote_quantity, current_price):
+def decide_quantities(base, base_balance, base_quantity, quote, quote_balance, quote_quantity, current_price, low_price, high_price):
     """
     Determine the quantities to allocate for buy and sell orders.
     """
@@ -202,7 +205,7 @@ def create_bell_curve_orders(current_price, low_price, high_price, peak_position
 
     return orders
 
-def print_orders_plan(exchange, symbol, orders):
+def print_orders_plan(exchange, symbol, orders, total_orders, peak_position, base, base_quantity, quote, quote_quantity, current_price, low_price, high_price):
     """
     Print the orders plan.
     """
@@ -275,15 +278,33 @@ def place_orders(exchange, symbol, orders, market_details):
         print(f"Quantity: {quantity} {base}")
         print(f"Cost: {cost} {quote}")
         print(f"-----------------------------------\n")
+
+        if DEBUG_MODE:
+            # Debug market details
+            print (f"Debug Market Details: {market_details}\n")
+
+            # Print warning if exchange returns None for limits
+            if market_details['limits']['amount']['min'] is None:
+                print(f"Warning: Min quantity not set for {symbol}.")
+            if market_details['limits']['amount']['max'] is None:
+                print(f"Warning: Max quantity not set for {symbol}.")
+            if market_details['limits']['price']['min'] is None:
+                print(f"Warning: Min price not set for {symbol}.")
+            if market_details['limits']['price']['max'] is None:
+                print(f"Warning: Max price not set for {symbol}.")
+            if market_details['limits']['cost']['min'] is None:
+                print(f"Warning: Min cost not set for {symbol}.")
+            if market_details['limits']['cost']['max'] is None:
+                print(f"Warning: Max cost not set for {symbol}.")
         
         # Validate against limits
-        if not (market_details['limits']['amount']['min'] <= quantity <= market_details['limits']['amount']['max']):
+        if (not (market_details['limits']['amount']['min'] is None) and not (market_details['limits']['amount']['max'] is None)) and (not (market_details['limits']['amount']['min'] <= quantity <= market_details['limits']['amount']['max'])):
             print(f"Quantity {quantity} out of range for {symbol}.")
             continue
-        if (not (market_details['limits']['price']['min'] is None) or not (market_details['limits']['price']['max'] is None)) and (not (market_details['limits']['price']['min'] <= price <= market_details['limits']['price']['max'])):
+        if (not (market_details['limits']['price']['min'] is None) and not (market_details['limits']['price']['max'] is None)) and (not (market_details['limits']['price']['min'] <= price <= market_details['limits']['price']['max'])):
             print(f"Price {price} out of range for {symbol}.")
             continue
-        if not (market_details['limits']['cost']['min'] <= cost <= market_details['limits']['cost']['max']):
+        if (not (market_details['limits']['cost']['min'] is None) and not (market_details['limits']['cost']['max'] is None)) and (not (market_details['limits']['cost']['min'] <= cost <= market_details['limits']['cost']['max'])):
             print(f"Cost {cost} out of range for {symbol}.")
             continue
         
@@ -312,81 +333,99 @@ def place_orders(exchange, symbol, orders, market_details):
             log_message(exchange, symbol, failure_message)
             log_message(exchange, symbol, f'{i}. Error: {e}')
 
-# Load API configuration
-config = load_config()
+def main(config):
+    """
+    Main function to run the script.
+    """
+    # Load reset variables
+    low_price = None
+    low_price_percent = float(config['defaults']['lowPricePct'])
+    high_price = None
+    high_price_percent = float(config['defaults']['highPricePct'])
+    current_price = None
+    total_orders = int(config['defaults']['totalOrders'])
+    peak_position = config['defaults']['peakPosition']
+    base_quantity = 0
+    quote_quantity = 0
+    std_dev_dividor = float(config['defaults']['stdDevDividor'])
 
-# Load default variables
-default_exchange = config['defaults']['exchange']
-low_price = None
-low_price_percent = float(config['defaults']['lowPricePct'])
-high_price = None
-high_price_percent = float(config['defaults']['highPricePct'])
-current_price = None
-total_orders = int(config['defaults']['totalOrders'])
-peak_position = config['defaults']['peakPosition']
-base_quantity = 0
-quote_quantity = 0
-std_dev_dividor = float(config['defaults']['stdDevDividor'])
+    # User input for symbol
+    exchange_input = input(f"Enter the exchange name [{DEFAULT_EXCHANGE}]: ").lower()
+    exchange_name = exchange_input if exchange_input else DEFAULT_EXCHANGE
 
-# User input for symbol
-exchange_input = input(f"Enter the exchange name [{default_exchange}]: ").lower()
-exchange_name = exchange_input if exchange_input else default_exchange
+    # Initialize CCXT exchange client with your API keys
+    exchange = initialize_exchange(exchange_name, config)
 
-# Initialize CCXT exchange client with your API keys
-exchange = initialize_exchange(exchange_name, config)
+    # User input for symbol
+    symbol = input("Enter the symbol (e.g., 'JUP/USDT'): ").upper()
 
-# User input for symbol
-symbol = input("Enter the symbol (e.g., 'JUP/USDT'): ").upper()
+    # Validate the symbol and fetch market details
+    market_details = validate_symbol(exchange, symbol)
+    if not market_details:
+        # Handle invalid symbol case here (e.g., request new input or exit)
+        exit("Exiting due to invalid symbol.")
+        
+    # Iterate until user inputs are valid
+    satisfied = False
+    while not satisfied:
+        # Fetch current price and generate orders
+        current_price = fetch_current_price(exchange, symbol)
 
-# Validate the symbol and fetch market details
-market_details = validate_symbol(exchange, symbol)
-if not market_details:
-    # Handle invalid symbol case here (e.g., request new input or exit)
-    exit("Exiting due to invalid symbol.")
+        if current_price is None:
+            print("Could not fetch current price for symbol. Please try again.")
+            continue
 
-# Iterate until user inputs are valid
-satisfied = False
-while not satisfied:
-    # Fetch current price and generate orders
-    current_price = fetch_current_price(exchange, symbol)
+        # If low_price and high_price are None, set low_price to 15% below current_price and high_price to 2.5% below current_price, rounded to same number of decimals on current_price
+        if low_price is None and high_price is None:
+            low_price = round(current_price * low_price_percent, len(str(current_price).split('.')[1]))
+            high_price = round(current_price * high_price_percent, len(str(current_price).split('.')[1]))
 
-    if current_price is None:
-        print("Could not fetch current price for symbol. Please try again.")
-        continue
+        # Assume base_balance and quote_balance fetched from the exchange
+        base, quote, base_balance, quote_balance = fetch_and_display_balances(exchange, symbol)
 
-    # If low_price and high_price are None, set low_price to 15% below current_price and high_price to 2.5% below current_price, rounded to same number of decimals on current_price
-    if low_price is None and high_price is None:
-        low_price = round(current_price * low_price_percent, len(str(current_price).split('.')[1]))
-        high_price = round(current_price * high_price_percent, len(str(current_price).split('.')[1]))
+        # Adjusted user input for symbol, price range, total orders, and peak position
+        low_price, high_price, total_orders = decide_prices_and_orders(low_price, high_price, total_orders)
 
-    # Assume base_balance and quote_balance fetched from the exchange
-    base, quote, base_balance, quote_balance = fetch_and_display_balances(exchange, symbol)
+        # Assume base_balance and quote_balance fetched from the exchange
+        base, quote, base_balance, quote_balance = fetch_and_display_balances(exchange, symbol)
 
-    # Adjusted user input for symbol, price range, total orders, and peak position
-    low_price, high_price, total_orders = decide_prices_and_orders(low_price, high_price, total_orders)
+        # Decide quantities to allocate to buy and sell orders
+        base_quantity, quote_quantity = decide_quantities(base, base_balance, base_quantity, quote, quote_balance, quote_quantity, current_price, low_price, high_price)
 
-    # Decide quantities to allocate to buy and sell orders
-    base_quantity, quote_quantity = decide_quantities(base, quote, base_balance, quote_balance, base_quantity, quote_quantity, current_price)
+        # Decide peak position on bell curve
+        peak_position, std_dev_dividor = decide_peak_position(peak_position, total_orders, std_dev_dividor)
 
-    # Decide peak position on bell curve
-    peak_position, std_dev_dividor = decide_peak_position(peak_position, total_orders, std_dev_dividor)
+        # Assuming market_details is obtained and validated earlier in the script
+        orders = create_bell_curve_orders(current_price, low_price, high_price, peak_position, total_orders, base_quantity, quote_quantity, std_dev_dividor, market_details, exchange, symbol)
 
-    # Assuming market_details is obtained and validated earlier in the script
-    orders = create_bell_curve_orders(current_price, low_price, high_price, peak_position, total_orders, base_quantity, quote_quantity, std_dev_dividor, market_details, exchange, symbol)
+        # Validate bell orders more than 1 order
+        if len(orders) < 2 or len(orders) > 100:
+            print("The bell curve grid requires at least 2 orders, and a maximum of 100 orders.")
+            continue
 
-    # Validate bell orders more than 1 order
-    if len(orders) < 2 or len(orders) > 100:
-        print("The bell curve grid requires at least 2 orders, and a maximum of 100 orders.")
-        continue
+        # Print orders plan
+        user_confirmation = print_orders_plan(exchange, symbol, orders, total_orders, peak_position, base, base_quantity, quote, quote_quantity, current_price, low_price, high_price)
 
-    # Print orders plan
-    user_confirmation = print_orders_plan(exchange, symbol, orders)
+        satisfied = user_confirmation == 'yes'
 
-    satisfied = user_confirmation == 'yes'
+    # Place orders after confirmation
+    place_orders(exchange, symbol, orders, market_details)
 
-# Place orders after confirmation
-place_orders(exchange, symbol, orders, market_details)
+    # Exit the script
+    log_message(exchange, symbol, 'Done!')
+    print("\nDone!")
 
-# Exit the script
-log_message(exchange, symbol, 'Done!')
-print("Done!")
+if __name__ == "__main__":
+     # Load API configuration
+    config = load_config()
+
+    # Load default variables
+    DEBUG_MODE = config['debug']['enabled']
+    if DEBUG_MODE:
+        print("Debug mode is enabled.\n")
+    
+    DEFAULT_EXCHANGE = config['defaults']['exchange']
+    if DEFAULT_EXCHANGE:
+        print(f"Default exchange is {DEFAULT_EXCHANGE}.\n")
+
+    main(config)
