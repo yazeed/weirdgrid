@@ -9,7 +9,7 @@ def log_message(exchange, symbol, message):
     Log a message to a file.
     """
     # Adjusted to include exchange name in log directory path
-    log_dir = f"logs/{exchange.name}"
+    log_dir = f"logs/{exchange}"
     os.makedirs(log_dir, exist_ok=True)
     
     date_str = datetime.now().strftime("%Y-%m-%d")
@@ -94,6 +94,7 @@ def fetch_current_price(exchange, symbol):
     """
     ticker = exchange.fetch_ticker(symbol)
     print(f"\nCurrent price of {symbol}: {ticker['last']}")
+    log_message(exchange.name, symbol, f"Current price of {symbol}: {ticker['last']}")
     return ticker['last']  # Using the last price as the current price
 
 def decide_quantities(base, base_balance, base_quantity, quote, quote_balance, quote_quantity, current_price, low_price, high_price):
@@ -239,12 +240,12 @@ def print_orders_plan(exchange, symbol, orders, total_orders, peak_position, bas
     # Ask if the user is satisfied with the orders plan
     user_confirmation = input("\nAre you satisfied with the orders plan? (yes/no): ").lower()
     if user_confirmation == 'yes':
-        log_message(exchange, symbol, f"Bell Curve Grid - {exchange.name} - {symbol} Orders Plan:")
+        log_message(exchange.name, symbol, f"Bell Curve Grid - {exchange.name} - {symbol} Orders Plan:")
         # If approved, log all order plan messages
         for message in order_plan_messages:
-            log_message(exchange, symbol, message)
+            log_message(exchange.name, symbol, message)
 
-        log_message(exchange, symbol, log_inputs)
+        log_message(exchange.name, symbol, log_inputs)
 
     return user_confirmation
 
@@ -324,14 +325,14 @@ def place_orders(exchange, symbol, orders, market_details):
             success_message = f"{i}. Order Placed: {order_type.capitalize()} {formatted_quantity} of {symbol} @ {formatted_price} for a total cost of {cost}."
             print(success_message)
             print(f"{i}. Order Details: ", order)
-            log_message(exchange, symbol, success_message)
-            log_message(exchange, symbol, f'{i}. Order Details: {order}')
+            log_message(exchange.name, symbol, success_message)
+            log_message(exchange.name, symbol, f'{i}. Order Details: {order}')
         except Exception as e:
             failure_message = f"{i}. Failed to place {order_type.capitalize()} order for {symbol} at price {formatted_price} and quantity {formatted_quantity}.\n"
             print(failure_message)
             print(f"{i}. Error:", e)
-            log_message(exchange, symbol, failure_message)
-            log_message(exchange, symbol, f'{i}. Error: {e}')
+            log_message(exchange.name, symbol, failure_message)
+            log_message(exchange.name, symbol, f'{i}. Error: {e}')
 
 def main(config):
     """
@@ -368,7 +369,7 @@ def main(config):
     # Iterate until user inputs are valid
     satisfied = False
     while not satisfied:
-        # Fetch current price and generate orders
+        # Fetch current price
         current_price = fetch_current_price(exchange, symbol)
 
         if current_price is None:
@@ -412,20 +413,25 @@ def main(config):
     place_orders(exchange, symbol, orders, market_details)
 
     # Exit the script
-    log_message(exchange, symbol, 'Done!')
-    print("\nDone!")
+    print("\nBell Curve Orders Placed Successfully!")
+    log_message(exchange.name, symbol, '--- THE END ---')
 
 if __name__ == "__main__":
-     # Load API configuration
+    # Load API configuration
     config = load_config()
 
     # Load default variables
     DEBUG_MODE = config['debug']['enabled']
     if DEBUG_MODE:
         print("Debug mode is enabled.\n")
+    else:
+        DEBUG_MODE = False
+        print("Debug mode is disabled.\n")
     
     DEFAULT_EXCHANGE = config['defaults']['exchange']
     if DEFAULT_EXCHANGE:
         print(f"Default exchange is {DEFAULT_EXCHANGE}.\n")
+    else:
+        DEFAULT_EXCHANGE = 'binance'
 
     main(config)
