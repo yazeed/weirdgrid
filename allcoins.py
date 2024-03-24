@@ -130,7 +130,7 @@ def update_database(cryptocurrencies):
         market_cap_to_supply_price_ratio = market_cap / (circulating_supply * current_price) if circulating_supply and current_price else 0
         supply_adjustment_factor = market_cap_to_supply_price_ratio * (circulating_supply / total_supply) * (circulating_supply / max_supply) if total_supply and max_supply and market_cap_to_supply_price_ratio else 0
         crypto_multiplier = 1 + (circulating_supply / (circulating_supply - (total_supply - circulating_supply))) * (circulating_supply / market_cap) if total_supply and market_cap and circulating_supply - (total_supply - circulating_supply) != 0 else 0
-        price_sensitivity = (market_cap / circulating_supply) / (fully_diluted_valuation / max_supply) if circulating_supply and max_supply else 0
+        price_sensitivity = (market_cap / circulating_supply) / (fully_diluted_valuation / max_supply) if circulating_supply and max_supply and fully_diluted_valuation else 0
         dilution_growth_potential = 1 - (market_cap / fully_diluted_valuation) if fully_diluted_valuation else 0
 
         # Update market data and determine which exchanges the cryptocurrency is traded on
