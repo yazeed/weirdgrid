@@ -157,17 +157,18 @@ def update_database(cryptocurrencies):
         # Insert or update the cryptocurrency information
         c.execute('''INSERT INTO cryptocurrencies
                      (id, symbol, name, market_cap_rank, market_cap_category, current_price, market_cap, 
-                      fully_diluted_valuation, total_volume, circulating_supply, 
-                      total_supply, max_supply, ath, atl, market_cap_to_supply_price_ratio,
-                      supply_adjustment_factor, crypto_multiplier, dilution_growth_potential)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                      fully_diluted_valuation, total_volume, circulating_supply, total_supply, max_supply,
+                      ath, atl, market_cap_to_supply_price_ratio, supply_adjustment_factor, crypto_multiplier,
+                      dilution_growth_potential, binance, kucoin, okx, mexc)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                      ON CONFLICT(id) DO UPDATE SET
                      symbol=excluded.symbol, name=excluded.name, market_cap_rank=excluded.market_cap_rank, 
                      market_cap_category=excluded.market_cap_category, current_price=excluded.current_price, market_cap=excluded.market_cap, 
                      fully_diluted_valuation=excluded.fully_diluted_valuation, total_volume=excluded.total_volume, 
                      circulating_supply=excluded.circulating_supply, total_supply=excluded.total_supply, 
                      max_supply=excluded.max_supply, ath=excluded.ath, atl=excluded.atl, market_cap_to_supply_price_ratio=excluded.market_cap_to_supply_price_ratio,
-                     supply_adjustment_factor=excluded.supply_adjustment_factor, crypto_multiplier=excluded.crypto_multiplier, dilution_growth_potential=excluded.dilution_growth_potential''', 
+                     supply_adjustment_factor=excluded.supply_adjustment_factor, crypto_multiplier=excluded.crypto_multiplier, dilution_growth_potential=excluded.dilution_growth_potential,
+                     binance=excluded.binance, kucoin=excluded.kucoin, okx=excluded.okx, mexc=excluded.mexc''', 
                      data_tuple)
 
         # Update market data
