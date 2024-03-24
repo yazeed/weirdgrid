@@ -27,11 +27,12 @@ def create_database():
                  (id TEXT PRIMARY KEY, symbol TEXT, name TEXT, market_cap_rank REAL, market_cap_category TEXT, current_price REAL DEFAULT 0, market_cap REAL DEFAULT 0, 
                   fully_diluted_valuation REAL DEFAULT 0, total_volume REAL DEFAULT 0, circulating_supply REAL DEFAULT 0, 
                   total_supply REAL DEFAULT 0, max_supply REAL DEFAULT 0, ath REAL DEFAULT 0, atl REAL DEFAULT 0, market_cap_to_supply_price_ratio REAL DEFAULT 0,
-                  supply_adjustment_factor REAL DEFAULT 0, crypto_multiplier REAL DEFAULT 0, dilution_growth_potential REAL DEFAULT 0);''')
+                  supply_adjustment_factor REAL DEFAULT 0, crypto_multiplier REAL DEFAULT 0, dilution_growth_potential REAL DEFAULT 0,
+                  binance BOOLEAN DEFAULT 0, kucoin BOOLEAN DEFAULT 0, okx BOOLEAN DEFAULT 0, mexc BOOLEAN DEFAULT 0);''')
     # Create the markets table if it doesn't exist
     c.execute('''CREATE TABLE IF NOT EXISTS markets
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT, coin_id TEXT, exchange TEXT, 
-                  pair TEXT, price REAL, UNIQUE(coin_id, exchange, pair));''')
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT, coin_id TEXT, exchange TEXT, trust_score TEXT,
+                  pair TEXT, price REAL DEFAULT 0, volume REAL DEFAULT 0, bid_ask_spread_percentage REAL DEFAULT 0, UNIQUE(coin_id, exchange, pair));''')
     conn.commit()
     conn.close()
 
@@ -70,7 +71,10 @@ def get_market_data(coin_id, retries=5, retry_delay=60):
                     'coin_id': coin_id,
                     'exchange': ticker['market']['name'],
                     'pair': ticker['base'] + '/' + ticker['target'],
-                    'price': ticker['last']
+                    'price': ticker['last'],
+                    'trust_score': ticker['trust_score'],
+                    'volume': ticker['volume'],
+                    'bid_ask_spread_percentage': ticker['bid_ask_spread_percentage'],
                 }
                 market_data.append(market_info)
             return market_data
@@ -96,25 +100,25 @@ def update_database(cryptocurrencies):
         current_price = crypto.get('current_price', 0) or 0
         market_cap = crypto.get('market_cap', 0) or 0
         if market_cap > 10000000000:
-            market_cap_category = 'above 10B'
+            market_cap_category = '(A) above 10B'
         elif market_cap > 2000000000:
-            market_cap_category = 'above 2B'
+            market_cap_category = '(B) above 2B'
         elif market_cap > 400000000:
-            market_cap_category = 'above 400M'
+            market_cap_category = '(C) above 400M'
         elif market_cap > 80000000:
-            market_cap_category = 'above 80M'
+            market_cap_category = '(D) above 80M'
         elif market_cap > 20000000:
-            market_cap_category = 'above 20M'
+            market_cap_category = '(E) above 20M'
         elif market_cap > 4000000:
-            market_cap_category = 'above 4M'
+            market_cap_category = '(F) above 4M'
         elif market_cap > 800000:
-            market_cap_category = 'above 800K'
+            market_cap_category = '(G) above 800K'
         elif market_cap > 200000:
-            market_cap_category = 'above 200K'
+            market_cap_category = '(H) above 200K'
         elif market_cap > 40000:
-            market_cap_category = 'above 40K'
+            market_cap_category = '(I) above 40K'
         else:
-            market_cap_category = 'below 40K'
+            market_cap_category = '(J) below 40K'
         fully_diluted_valuation = crypto.get('fully_diluted_valuation', 0) or 0
         total_volume = crypto.get('total_volume', 0) or 0
         circulating_supply = crypto.get('circulating_supply', 0) or 0
@@ -129,10 +133,25 @@ def update_database(cryptocurrencies):
         crypto_multiplier = (circulating_supply / (circulating_supply - (total_supply - circulating_supply))) * (circulating_supply / market_cap) if total_supply and market_cap and circulating_supply - (total_supply - circulating_supply) != 0 else 0
         dilution_growth_potential = fully_diluted_valuation / market_cap if market_cap else 0
 
+        # Update market data and determine which exchanges the cryptocurrency is traded on
+        markets = get_market_data(crypto['id'])
+        binance, kucoin, okx, mexc = False, False, False, False  # Initialize exchange presence flags
+        for market in markets:
+            exchange = market['exchange'].lower()
+            if 'binance' in exchange:
+                binance = True
+            if 'kucoin' in exchange:
+                kucoin = True
+            if 'okx' in exchange:
+                okx = True
+            if 'mexc' in exchange or 'mxc' in exchange:  # Assuming MXC refers to MEXC as well
+                mexc = True
+
         # Prepare the data tuple
         data_tuple = (id, symbol, name, market_cap_rank, market_cap_category, current_price, market_cap, fully_diluted_valuation, 
                       total_volume, circulating_supply, total_supply, max_supply, ath, atl,
-                      market_cap_to_supply_price_ratio, supply_adjustment_factor, crypto_multiplier, dilution_growth_potential)
+                      market_cap_to_supply_price_ratio, supply_adjustment_factor, crypto_multiplier, dilution_growth_potential,
+                      binance, kucoin, okx, mexc)
 
         print(f"Updating {symbol} ({id})...")
         # Insert or update the cryptocurrency information
@@ -152,15 +171,14 @@ def update_database(cryptocurrencies):
                      data_tuple)
 
         # Update market data
-        markets = get_market_data(crypto['id'])
         for market in markets:
             print(f"Updating {symbol} ({id}) market data for {market['exchange']} {market['pair']}...")
             # Insert or update the market information
-            c.execute('''INSERT INTO markets (coin_id, exchange, pair, price)
-                         VALUES (?, ?, ?, ?)
+            c.execute('''INSERT INTO markets (coin_id, exchange, trust_score, pair, price, volume, bid_ask_spread_percentage)
+                         VALUES (?, ?, ?, ?, ?, ?, ?)
                          ON CONFLICT(coin_id, exchange, pair) DO UPDATE SET
-                         price=excluded.price''',
-                      (market['coin_id'], market['exchange'], market['pair'], market['price']))
+                         trust_score=excluded.trust_score, price=excluded.price, volume=excluded.volume, bid_ask_spread_percentage=excluded.bid_ask_spread_percentage''',
+                      (market['coin_id'], market['exchange'], market['trust_score'], market['pair'], market['price'], market['volume'], market['bid_ask_spread_percentage']))
             
         conn.commit()
     
