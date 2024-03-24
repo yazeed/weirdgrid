@@ -1,7 +1,6 @@
 import requests
 import time
 import sqlite3
-import os
 
 # market_cap_to_supply_price_ratio (simple market cap elasticity) = market cap / (circulating supply * price)
 ## higher is overpriced (high sensitivity to future inflation), lower is underpriced (less sensitivity to future inflation)
@@ -27,7 +26,7 @@ def create_database():
                  (id TEXT PRIMARY KEY, symbol TEXT, name TEXT, market_cap_rank REAL, market_cap_category TEXT, current_price REAL DEFAULT 0, market_cap REAL DEFAULT 0, 
                   fully_diluted_valuation REAL DEFAULT 0, total_volume REAL DEFAULT 0, circulating_supply REAL DEFAULT 0, 
                   total_supply REAL DEFAULT 0, max_supply REAL DEFAULT 0, ath REAL DEFAULT 0, atl REAL DEFAULT 0, market_cap_to_supply_price_ratio REAL DEFAULT 0,
-                  supply_adjustment_factor REAL DEFAULT 0, crypto_multiplier REAL DEFAULT 0, dilution_growth_potential REAL DEFAULT 0,
+                  supply_adjustment_factor REAL DEFAULT 0, crypto_multiplier REAL DEFAULT 0, price_sensitivity REAL DEFAULT 0, dilution_growth_potential REAL DEFAULT 0,
                   binance BOOLEAN DEFAULT 0, kucoin BOOLEAN DEFAULT 0, okx BOOLEAN DEFAULT 0, mexc BOOLEAN DEFAULT 0);''')
     # Create the markets table if it doesn't exist
     c.execute('''CREATE TABLE IF NOT EXISTS markets
@@ -130,8 +129,9 @@ def update_database(cryptocurrencies):
         # Calculate additional metrics
         market_cap_to_supply_price_ratio = market_cap / (circulating_supply * current_price) if circulating_supply and current_price else 0
         supply_adjustment_factor = market_cap_to_supply_price_ratio * (circulating_supply / total_supply) * (circulating_supply / max_supply) if total_supply and max_supply and market_cap_to_supply_price_ratio else 0
-        crypto_multiplier = (circulating_supply / (circulating_supply - (total_supply - circulating_supply))) * (circulating_supply / market_cap) if total_supply and market_cap and circulating_supply - (total_supply - circulating_supply) != 0 else 0
-        dilution_growth_potential = fully_diluted_valuation / market_cap if market_cap else 0
+        crypto_multiplier = 1 + (circulating_supply / (circulating_supply - (total_supply - circulating_supply))) * (circulating_supply / market_cap) if total_supply and market_cap and circulating_supply - (total_supply - circulating_supply) != 0 else 0
+        price_sensitivity = (market_cap / circulating_supply) / (fully_diluted_valuation / max_supply) if circulating_supply and max_supply else 0
+        dilution_growth_potential = 1 - (market_cap / fully_diluted_valuation) if fully_diluted_valuation else 0
 
         # Update market data and determine which exchanges the cryptocurrency is traded on
         markets = get_market_data(crypto['id'])
@@ -150,7 +150,7 @@ def update_database(cryptocurrencies):
         # Prepare the data tuple
         data_tuple = (id, symbol, name, market_cap_rank, market_cap_category, current_price, market_cap, fully_diluted_valuation, 
                       total_volume, circulating_supply, total_supply, max_supply, ath, atl,
-                      market_cap_to_supply_price_ratio, supply_adjustment_factor, crypto_multiplier, dilution_growth_potential,
+                      market_cap_to_supply_price_ratio, supply_adjustment_factor, crypto_multiplier, price_sensitivity, dilution_growth_potential,
                       binance, kucoin, okx, mexc)
 
         print(f"Updating {symbol} ({id})...")
@@ -158,16 +158,17 @@ def update_database(cryptocurrencies):
         c.execute('''INSERT INTO cryptocurrencies
                      (id, symbol, name, market_cap_rank, market_cap_category, current_price, market_cap, 
                       fully_diluted_valuation, total_volume, circulating_supply, total_supply, max_supply,
-                      ath, atl, market_cap_to_supply_price_ratio, supply_adjustment_factor, crypto_multiplier,
+                      ath, atl, market_cap_to_supply_price_ratio, supply_adjustment_factor, crypto_multiplier, price_sensitivity,
                       dilution_growth_potential, binance, kucoin, okx, mexc)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                      ON CONFLICT(id) DO UPDATE SET
                      symbol=excluded.symbol, name=excluded.name, market_cap_rank=excluded.market_cap_rank, 
                      market_cap_category=excluded.market_cap_category, current_price=excluded.current_price, market_cap=excluded.market_cap, 
                      fully_diluted_valuation=excluded.fully_diluted_valuation, total_volume=excluded.total_volume, 
                      circulating_supply=excluded.circulating_supply, total_supply=excluded.total_supply, 
                      max_supply=excluded.max_supply, ath=excluded.ath, atl=excluded.atl, market_cap_to_supply_price_ratio=excluded.market_cap_to_supply_price_ratio,
-                     supply_adjustment_factor=excluded.supply_adjustment_factor, crypto_multiplier=excluded.crypto_multiplier, dilution_growth_potential=excluded.dilution_growth_potential,
+                     supply_adjustment_factor=excluded.supply_adjustment_factor, crypto_multiplier=excluded.crypto_multiplier, price_sensitivity=excluded.price_sensitivity,
+                     dilution_growth_potential=excluded.dilution_growth_potential,
                      binance=excluded.binance, kucoin=excluded.kucoin, okx=excluded.okx, mexc=excluded.mexc''', 
                      data_tuple)
 
@@ -193,14 +194,14 @@ def main():
         cryptocurrencies = fetch_cryptocurrencies(page=page)
         if not cryptocurrencies:
             break  # Stop if no more cryptocurrencies are fetched
-        try:
-            update_database(cryptocurrencies)
-            print(f"Page {page} processed successfully.")
-            page += 1
-            time.sleep(1)  # Throttle requests to avoid hitting rate limits
-        except Exception as e:
-            print(f"Page {page} failed to process.", e)
-            next
+        # try:
+        update_database(cryptocurrencies)
+        print(f"Page {page} processed successfully.")
+        page += 1
+        time.sleep(1)  # Throttle requests to avoid hitting rate limits
+        # except Exception as e:
+        #     print(f"Page {page} failed to process.", e)
+        #     next
 
 if __name__ == "__main__":
     main()
