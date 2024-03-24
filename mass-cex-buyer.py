@@ -1,16 +1,16 @@
 import json
+import random
 import os
 from datetime import datetime
 import ccxt
 import numpy as np
-import logging
 
 def log_message(exchange, symbol, message):
     """
     Log a message to a file.
     """
     # Adjusted to include exchange name in log directory path
-    log_dir = f"logs/{exchange}"
+    log_dir = f"logs/{exchange.name}"
     os.makedirs(log_dir, exist_ok=True)
     
     date_str = datetime.now().strftime("%Y-%m-%d")
@@ -49,7 +49,6 @@ def initialize_exchange(exchange_name, config):
         'enableRateLimit': True,
         'options': {
             'defaultType': 'spot',
-            "adjustForTimeDifference": True,
         }
     }
 
@@ -57,15 +56,6 @@ def initialize_exchange(exchange_name, config):
         exchange_config['password'] = config[exchange_name]['password']
 
     exchange = getattr(ccxt, exchange_name)(exchange_config)
-
-    # Print all exchange object attributes and values
-    if DEBUG_MODE:
-        print(f"Exchange: {exchange_name}")
-        print(f"Exchange config: {exchange_config}")
-        print(f"Exchange attributes:")
-        for key, value in exchange.__dict__.items():
-            print(f"{key}: {value}")
-        print()
 
     # Validate that the exchange is working
     if not exchange.check_required_credentials():
@@ -105,7 +95,6 @@ def fetch_current_price(exchange, symbol):
     """
     ticker = exchange.fetch_ticker(symbol)
     print(f"\nCurrent price of {symbol}: {ticker['last']}")
-    log_message(exchange.name, symbol, f"Current price of {symbol}: {ticker['last']}")
     return ticker['last']  # Using the last price as the current price
 
 def decide_quantities(base, base_balance, base_quantity, quote, quote_balance, quote_quantity, current_price, low_price, high_price):
@@ -251,12 +240,12 @@ def print_orders_plan(exchange, symbol, orders, total_orders, peak_position, bas
     # Ask if the user is satisfied with the orders plan
     user_confirmation = input("\nAre you satisfied with the orders plan? (yes/no): ").lower()
     if user_confirmation == 'yes':
-        log_message(exchange.name, symbol, f"Bell Curve Grid - {exchange.name} - {symbol} Orders Plan:")
+        log_message(exchange, symbol, f"Bell Curve Grid - {exchange.name} - {symbol} Orders Plan:")
         # If approved, log all order plan messages
         for message in order_plan_messages:
-            log_message(exchange.name, symbol, message)
+            log_message(exchange, symbol, message)
 
-        log_message(exchange.name, symbol, log_inputs)
+        log_message(exchange, symbol, log_inputs)
 
     return user_confirmation
 
@@ -290,33 +279,15 @@ def place_orders(exchange, symbol, orders, market_details):
         print(f"Quantity: {quantity} {base}")
         print(f"Cost: {cost} {quote}")
         print(f"-----------------------------------\n")
-
-        if DEBUG_MODE:
-            # Debug market details
-            print (f"Debug Market Details: {market_details}\n")
-
-            # Print warning if exchange returns None for limits
-            if market_details['limits']['amount']['min'] is None:
-                print(f"Warning: Min quantity not set for {symbol}.")
-            if market_details['limits']['amount']['max'] is None:
-                print(f"Warning: Max quantity not set for {symbol}.")
-            if market_details['limits']['price']['min'] is None:
-                print(f"Warning: Min price not set for {symbol}.")
-            if market_details['limits']['price']['max'] is None:
-                print(f"Warning: Max price not set for {symbol}.")
-            if market_details['limits']['cost']['min'] is None:
-                print(f"Warning: Min cost not set for {symbol}.")
-            if market_details['limits']['cost']['max'] is None:
-                print(f"Warning: Max cost not set for {symbol}.")
         
         # Validate against limits
-        if (not (market_details['limits']['amount']['min'] is None) and not (market_details['limits']['amount']['max'] is None)) and (not (market_details['limits']['amount']['min'] <= quantity <= market_details['limits']['amount']['max'])):
+        if not (market_details['limits']['amount']['min'] <= quantity <= market_details['limits']['amount']['max']):
             print(f"Quantity {quantity} out of range for {symbol}.")
             continue
-        if (not (market_details['limits']['price']['min'] is None) and not (market_details['limits']['price']['max'] is None)) and (not (market_details['limits']['price']['min'] <= price <= market_details['limits']['price']['max'])):
+        if (not (market_details['limits']['price']['min'] is None) or not (market_details['limits']['price']['max'] is None)) and (not (market_details['limits']['price']['min'] <= price <= market_details['limits']['price']['max'])):
             print(f"Price {price} out of range for {symbol}.")
             continue
-        if (not (market_details['limits']['cost']['min'] is None) and not (market_details['limits']['cost']['max'] is None)) and (not (market_details['limits']['cost']['min'] <= cost <= market_details['limits']['cost']['max'])):
+        if not (market_details['limits']['cost']['min'] <= cost <= market_details['limits']['cost']['max']):
             print(f"Cost {cost} out of range for {symbol}.")
             continue
         
@@ -336,20 +307,21 @@ def place_orders(exchange, symbol, orders, market_details):
             success_message = f"{i}. Order Placed: {order_type.capitalize()} {formatted_quantity} of {symbol} @ {formatted_price} for a total cost of {cost}."
             print(success_message)
             print(f"{i}. Order Details: ", order)
-            log_message(exchange.name, symbol, success_message)
-            log_message(exchange.name, symbol, f'{i}. Order Details: {order}')
+            log_message(exchange, symbol, success_message)
+            log_message(exchange, symbol, f'{i}. Order Details: {order}')
         except Exception as e:
             failure_message = f"{i}. Failed to place {order_type.capitalize()} order for {symbol} at price {formatted_price} and quantity {formatted_quantity}.\n"
             print(failure_message)
             print(f"{i}. Error:", e)
-            log_message(exchange.name, symbol, failure_message)
-            log_message(exchange.name, symbol, f'{i}. Error: {e}')
+            log_message(exchange, symbol, failure_message)
+            log_message(exchange, symbol, f'{i}. Error: {e}')
 
-def main(config):
-    """
-    Main function to run the script.
-    """
-    # Load reset variables
+def main():
+    # Load API configuration
+    config = load_config()
+
+    # Load default variables
+    default_exchange = config['defaults']['exchange']
     low_price = None
     low_price_percent = float(config['defaults']['lowPricePct'])
     high_price = None
@@ -362,8 +334,8 @@ def main(config):
     std_dev_dividor = float(config['defaults']['stdDevDividor'])
 
     # User input for symbol
-    exchange_input = input(f"Enter the exchange name [{DEFAULT_EXCHANGE}]: ").lower()
-    exchange_name = exchange_input if exchange_input else DEFAULT_EXCHANGE
+    exchange_input = input(f"Enter the exchange name [{default_exchange}]: ").lower()
+    exchange_name = exchange_input if exchange_input else default_exchange
 
     # Initialize CCXT exchange client with your API keys
     exchange = initialize_exchange(exchange_name, config)
@@ -380,7 +352,7 @@ def main(config):
     # Iterate until user inputs are valid
     satisfied = False
     while not satisfied:
-        # Fetch current price
+        # Fetch current price and generate orders
         current_price = fetch_current_price(exchange, symbol)
 
         if current_price is None:
@@ -424,25 +396,8 @@ def main(config):
     place_orders(exchange, symbol, orders, market_details)
 
     # Exit the script
-    print("\nBell Curve Orders Placed Successfully!")
-    log_message(exchange.name, symbol, '--- THE END ---')
+    log_message(exchange, symbol, 'Done!')
+    print("\nDone!")
 
 if __name__ == "__main__":
-    # Load API configuration
-    config = load_config()
-
-    # Load default variables
-    DEBUG_MODE = config['debug']['enabled']
-    if DEBUG_MODE:
-        print("Debug mode is enabled.\n")
-    else:
-        DEBUG_MODE = False
-        print("Debug mode is disabled.\n")
-    
-    DEFAULT_EXCHANGE = config['defaults']['exchange']
-    if DEFAULT_EXCHANGE:
-        print(f"Default exchange is {DEFAULT_EXCHANGE}.\n")
-    else:
-        DEFAULT_EXCHANGE = 'binance'
-
-    main(config)
+    main()

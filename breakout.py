@@ -1,10 +1,138 @@
-import json
 import os
+import sys
 from datetime import datetime
 import ccxt
 import numpy as np
 import time
+import logging
+import argparse
+import json  # Make sure to import json if you're using it
 
+def load_config(config_path="config.json"):
+    """
+    Load the API configuration from a JSON file.
+    """
+    with open(config_path, "r") as file:
+        config = json.load(file)
+    
+    return config
+
+def setup_logging(log_directory, log_filename, log_level):
+    """
+    Sets up the logging configuration.
+    """
+    # Create the log directory if it doesn't exist
+    os.makedirs(log_directory, exist_ok=True)
+    
+    # Get the root logger
+    logger = logging.getLogger()
+    logger.setLevel(log_level)  # Set the logger level
+
+    # Clear existing handlers (important to prevent duplication if this function is called multiple times)
+    logger.handlers.clear()
+
+    # Create and add a file handler
+    file_handler = logging.FileHandler(f"{log_directory}/{log_filename}.log", mode='a')
+    file_formatter = logging.Formatter("[%(asctime)s] [%(levelname)s] %(message)s", "%Y-%m-%d %H:%M:%S")
+    file_handler.setFormatter(file_formatter)
+    logger.addHandler(file_handler)
+
+    # Create and add a console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(log_level)
+    console_formatter = logging.Formatter("[%(asctime)s] [%(levelname)s] %(message)s")
+    console_handler.setFormatter(console_formatter)
+    logger.addHandler(console_handler)
+
+def load_defaults(config):
+    # Load default variables
+    debug_mode = config["debug"]["enabled"]
+    if debug_mode:
+        print("Debug mode is enabled.\n")
+    else:
+        debug_mode = False
+        print("Debug mode is disabled.\n")
+
+    default_exchange = config["defaults"]["exchange"]
+    if default_exchange:
+        print(f"Default exchange is {default_exchange}.\n")
+    else:
+        default_exchange = "binance"
+
+    default_symbol = config["defaults"]["symbol"]
+    if default_symbol:
+        print(f"Default symbol is {default_symbol}.\n")
+    else:
+        default_symbol = "BTC/USDT"
+
+    default_timeframe = config["defaults"]["timeframe"]
+    if default_timeframe:
+        print(f"Default timeframe is {default_timeframe}.\n")
+    else:
+        default_timeframe = "1d"
+
+    default_min_pct = float(config["defaults"]["breakoutMinPct"])
+    if default_min_pct:
+        print(
+            f"Default minimum percentage between breakout levels is {default_min_pct}.\n"
+        )
+    else:
+        default_min_pct = 0.25
+
+    default_nbr_levels = int(config["defaults"]["breakoutNumLvls"])
+    if default_nbr_levels:
+        print(f"Default number of breakout levels is {default_nbr_levels}.\n")
+    else:
+        default_nbr_levels = 5
+
+    default_atr_period = int(config["defaults"]["breakoutAtrPeriod"])
+    if default_atr_period:
+        print(f"Default ATR period is {default_atr_period}.\n")
+    else:
+        default_atr_period = 5
+
+    default_lookback_candles = config["defaults"]["breakoutLookbackCdls"]
+    if default_lookback_candles:
+        print(f"Default lookback candles is {default_lookback_candles}.\n")
+    else:
+        default_lookback_candles = 10000
+
+    return debug_mode, default_exchange, default_symbol, default_timeframe, default_min_pct, default_nbr_levels, default_atr_period, default_lookback_candles
+
+# Constants defined at the module level
+SCRIPT_NAME = os.path.splitext(os.path.basename(__file__))[0]
+
+# Call setup_logging with the constants
+LOG_DIRECTORY = f"logs/{SCRIPT_NAME}"
+LOG_FILENAME = f"{time.strftime('%Y-%m-%d %H-%M-%S')}"
+LOG_LEVEL = logging.INFO
+setup_logging(LOG_DIRECTORY, LOG_FILENAME, LOG_LEVEL)
+
+# Log basic information
+logging.info("Loading script: %s", SCRIPT_NAME)
+logging.debug("Python Version: %s", sys.version)
+logging.debug("CCXT Version: %s", ccxt.__version__)
+logging.debug("CCXT Exchanges: %s", ccxt.exchanges)
+
+# Load script configuration
+config = load_config()
+logging.debug("Config: %s", config)
+
+# Load defaults
+DEBUG_MODE, DEFAULT_EXCHANGE, DEFAULT_SYMBOL, DEFAULT_TIMEFRAME, DEFAULT_MIN_PCT, DEFAULT_NBR_LEVELS, DEFAULT_ATR_PERIOD, DEFAULT_LOOKBACK_CANDLES = load_defaults(config)
+logging.info("Debug Mode: %s", DEBUG_MODE)
+logging.info("Default Exchange: %s", DEFAULT_EXCHANGE)
+logging.info("Default Symbol: %s", DEFAULT_SYMBOL)
+logging.info("Default Timeframe: %s", DEFAULT_TIMEFRAME)
+logging.info("Default Minimum Percentage: %s", DEFAULT_MIN_PCT)
+logging.info("Default Number of Breakout Levels: %s", DEFAULT_NBR_LEVELS)
+logging.info("Default ATR Period: %s", DEFAULT_ATR_PERIOD)
+logging.info("Default Lookback Candles: %s", DEFAULT_LOOKBACK_CANDLES)
+
+print()
+
+# Create an argument parser
+parser = argparse.ArgumentParser(description="Weird Trading Bot")
 
 def log_message(exchange, symbol, message):
     """
@@ -22,7 +150,6 @@ def log_message(exchange, symbol, message):
     with open(filename, "a") as log_file:
         log_file.write(f"[{timestamp}] {message}\n")
 
-
 def load_config(config_path="config.json"):
     """
     Load the API configuration from a JSON file.
@@ -30,7 +157,6 @@ def load_config(config_path="config.json"):
     with open(config_path, "r") as file:
         config = json.load(file)
     return config
-
 
 def initialize_exchange(exchange_name, config):
     """
@@ -47,10 +173,12 @@ def initialize_exchange(exchange_name, config):
         "enableRateLimit": True,
         "options": {
             "defaultType": "spot",
+            "adjustForTimeDifference": True,
         },
     }
     if "password" in config[exchange_name]:
         exchange_config["password"] = config[exchange_name]["password"]
+        
     exchange = getattr(ccxt, exchange_name)(exchange_config)
 
     # Print all exchange object attributes and values
@@ -333,7 +461,7 @@ def calculate_probabilities(
                 (abs(high_price_level - current_price) / current_price) * 100, 2
             )
             probabilities.append(
-                (green_high_probs[i], high_price_level, long_or_short, distance_in_pct)
+                (green_high_probs[i], round(high_price_level, len(str(current_price).split(".")[1])), long_or_short, distance_in_pct)
             )
         if green_low_probs[i] > 0:
             long_or_short = "LONG" if low_price_level > current_price else "SHORT"
@@ -341,7 +469,7 @@ def calculate_probabilities(
                 (abs(low_price_level - current_price) / current_price) * 100, 2
             )
             probabilities.append(
-                (green_low_probs[i], low_price_level, long_or_short, distance_in_pct)
+                (green_low_probs[i], round(low_price_level, len(str(current_price).split(".")[1])), long_or_short, distance_in_pct)
             )
         if red_high_probs[i] > 0:
             long_or_short = "LONG" if high_price_level > current_price else "SHORT"
@@ -349,7 +477,7 @@ def calculate_probabilities(
                 (abs(high_price_level - current_price) / current_price) * 100, 2
             )
             probabilities.append(
-                (red_high_probs[i], high_price_level, long_or_short, distance_in_pct)
+                (red_high_probs[i], round(high_price_level, len(str(current_price).split(".")[1])), long_or_short, distance_in_pct)
             )
         if red_low_probs[i] > 0:
             long_or_short = "LONG" if low_price_level > current_price else "SHORT"
@@ -357,7 +485,7 @@ def calculate_probabilities(
                 (abs(low_price_level - current_price) / current_price * 100), 2
             )
             probabilities.append(
-                (red_low_probs[i], low_price_level, long_or_short, distance_in_pct)
+                (red_low_probs[i], round(low_price_level, len(str(current_price).split(".")[1])), long_or_short, distance_in_pct)
             )
 
     # Aggregating probabilities for the same price levels
@@ -434,9 +562,9 @@ def fetch_current_price(exchange, symbol):
 def place_trade_with_dynamic_stop_loss(
     exchange, symbol, probabilities, current_price, long_confidence, short_confidence
 ):
-    MIN_CONFIDENCE = 7
+    MIN_CONFIDENCE = 5
     MIN_PROBABILITY = 30
-    MIN_DISTANCE = 0.005
+    MIN_DISTANCE = 0.05
 
     highest_prob_trade = None
     for prob, price, long_or_short, distance_in_pct in probabilities:
@@ -460,7 +588,7 @@ def place_trade_with_dynamic_stop_loss(
     if highest_prob_trade:
         direction, price_level, probability = highest_prob_trade
         print(
-            f"Initiating {direction} trade with {probability:.2f}% probability at price level {price_level}"
+            f"Initiating {direction} trade targeting price level {price_level} with {probability:.2f}% probability."
         )
 
         # Calculate stop-loss based on the lowest probabilistic opposite side price level
@@ -497,17 +625,17 @@ def place_trade_with_dynamic_stop_loss(
         else:
             # Fallback in case no opposite direction prices found
             stop_loss_price = (
-                current_price - distance_to_target
+                round(current_price - distance_to_target, len(str(current_price).split(".")[1]))
                 if direction == "LONG"
-                else current_price + distance_to_target
+                else round(current_price + distance_to_target, len(str(current_price).split(".")[1]))
             )
 
-        take_profit_price = price_level
+        take_profit_price = round(price_level, len(str(current_price).split(".")[1]))
 
         # Convert this to actual order logic using Binance API
         # Placeholder for demonstration
         print(
-            f"Place limit order for {direction} at {current_price}, stop-loss at {stop_loss_price} and take-profit at {take_profit_price}"
+            f"Place a {direction} limit order at {current_price}, stop-loss at {stop_loss_price} and take-profit at {take_profit_price}"
         )
         # Actual Binance API calls would go here
     else:
@@ -540,9 +668,6 @@ def main(config):
     """
     Main function to run the script.
     """
-    # Load reset variables
-    lookback_candles = config["defaults"]["breakoutLookbackCdls"]
-
     # User input for symbol
     exchange_input = input(f"Enter the exchange name [{DEFAULT_EXCHANGE}]: ").lower()
     exchange_name = exchange_input if exchange_input else DEFAULT_EXCHANGE
@@ -557,7 +682,7 @@ def main(config):
     nbr = int(nbr_input) if nbr_input else DEFAULT_NBR_LEVELS
 
     # Fetch candles (0 is newest)
-    candles = fetch_all_candles(exchange, symbol, timeframe, lookback_candles)
+    candles = fetch_all_candles(exchange, symbol, timeframe, DEFAULT_LOOKBACK_CANDLES)
     if (
         candles is None
         or len(candles) == 0
@@ -578,11 +703,11 @@ def main(config):
     current_price = fetch_current_price(exchange, symbol)
 
     # Fetch Current ATR
-    atr_value = calculate_atr(candles, 4)
+    atr_value = calculate_atr(candles, DEFAULT_ATR_PERIOD)
 
     # Calculate minimum percentage between breakout levels
     DEFAULT_MIN_PCT = (
-        float(round((atr_value / current_price) * 100 / (nbr * 2), 2))
+        float(round((atr_value / current_price) * 100 / nbr, 2))
         if atr_value > 0
         else DEFAULT_MIN_PCT
     )
@@ -630,12 +755,10 @@ def main(config):
     print("-----------------------------------")
     print(f"Exchange: {exchange.name}")
     print(f"Symbol: {symbol}")
-    print(f"Current Price: {current_price}")
-    print(f"Open Price: {candles[0][1]}")
-    print(f"Close Price: {candles[0][4]}")
     print(f"Timeframe: {timeframe}")
     print(f"ATR: {atr_value}")
-    print(f"# of Candles: {len(candles)}")
+    print(f"# of Lookback Candles: {DEFAULT_LOOKBACK_CANDLES}")
+    print(f"# of Actual Candles: {len(candles)}")
     print(f"# of Breakout Levels: {nbr}")
     print(f"Min. % for Breakout Levels: {perc}%")
     if DEBUG_MODE:
@@ -649,6 +772,10 @@ def main(config):
         print(f"Green Low Hits: {green_low_hits}")
         print(f"Red High Hits: {red_high_hits}")
         print(f"Red Low Hits: {red_low_hits}")
+    print(f"-----------------------------------")
+    print(f"*. Open Price: {candles[0][1]}")
+    print(f"*. Close Price: {candles[0][4]}")
+    print(f"*. Current Price: {current_price}")
     print(f"-----------------------------------")
     for i, (prob, price, long_or_short, distance_in_pct) in enumerate(
         probabilities, start=1
@@ -712,47 +839,4 @@ def main(config):
 
 
 if __name__ == "__main__":
-    # Load API configuration
-    config = load_config()
-
-    # Load default variables
-    DEBUG_MODE = config["debug"]["enabled"]
-    if DEBUG_MODE:
-        print("Debug mode is enabled.\n")
-    else:
-        DEBUG_MODE = False
-        print("Debug mode is disabled.\n")
-
-    DEFAULT_EXCHANGE = config["defaults"]["exchange"]
-    if DEFAULT_EXCHANGE:
-        print(f"Default exchange is {DEFAULT_EXCHANGE}.\n")
-    else:
-        DEFAULT_EXCHANGE = "binance"
-
-    DEFAULT_SYMBOL = config["defaults"]["symbol"]
-    if DEFAULT_SYMBOL:
-        print(f"Default symbol is {DEFAULT_SYMBOL}.\n")
-    else:
-        DEFAULT_SYMBOL = "BTC/USDT"
-
-    DEFAULT_TIMEFRAME = config["defaults"]["timeframe"]
-    if DEFAULT_TIMEFRAME:
-        print(f"Default timeframe is {DEFAULT_TIMEFRAME}.\n")
-    else:
-        DEFAULT_TIMEFRAME = "1d"
-
-    DEFAULT_MIN_PCT = float(config["defaults"]["breakoutMinPct"])
-    if DEFAULT_MIN_PCT:
-        print(
-            f"Default minimum percentage between breakout levels is {DEFAULT_MIN_PCT}.\n"
-        )
-    else:
-        DEFAULT_MIN_PCT = 0.25
-
-    DEFAULT_NBR_LEVELS = int(config["defaults"]["breakoutNumLvls"])
-    if DEFAULT_NBR_LEVELS:
-        print(f"Default number of breakout levels is {DEFAULT_NBR_LEVELS}.\n")
-    else:
-        DEFAULT_NBR_LEVELS = 5
-
     main(config)
